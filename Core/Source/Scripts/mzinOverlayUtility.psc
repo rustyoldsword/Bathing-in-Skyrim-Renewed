@@ -18,7 +18,12 @@ Function BeginOverlay(Actor akTarget, Float Alpha, Int Tint)
 	Int Gender = akTarget.GetLeveledActorBase().GetSex()
 	Int i = 0
 	String TexPrefix = 	StorageUtil.GetStringValue(akTarget, "mzin_DirtTexturePrefix", "")
-	If TexPrefix == ""
+	String UBEPrefix = mzinUBEDirtTextures.ResolvePrefix(akTarget, Gender)
+	If UBEPrefix != ""
+		; A saved Set# prefix may predate this patch.  UBE must always replace it.
+		TexPrefix = UBEPrefix
+		StorageUtil.SetStringValue(akTarget, "mzin_DirtTexturePrefix", TexPrefix)
+	ElseIf TexPrefix == ""
 		TexPrefix = TexUtil.PickRandomDirtSet(Gender, akTarget == PlayerRef)
 		if TexPrefix == ""
 			return
@@ -31,6 +36,14 @@ Function BeginOverlay(Actor akTarget, Float Alpha, Int Tint)
 		ReadyOverlay(akTarget, Gender as Bool, Areas[i], (TextureToApply + Areas[i] + ".dds"), Alpha, Tint)
 		i += 1
 	EndWhile
+	; SKEE stores the overlay but the body keeps its old skin until the 3D is
+	; rebuilt, so the dirt only showed up after a save/load.  Do it explicitly.
+	; This is needed for every actor, not just UBE ones: without it a vanilla-race
+	; body and hands stay clean while the head (rebuilt on its own) does not.
+	If akTarget.Is3DLoaded()
+		akTarget.QueueNiNodeUpdate()
+		Debug.Trace("[BiS dirt] Queued 3D refresh for " + akTarget.GetLeveledActorBase().GetName() + " (" + TexPrefix + ")")
+	EndIf
 EndFunction
 
 Function ReadyOverlay(Actor akTarget, Bool Gender, String Area, String TextureToApply, Float Alpha, Int Tint)
@@ -80,6 +93,7 @@ Function UpdateAlpha(Actor akTarget, Float Alpha)
 		EndWhile
 		Result = false
 	EndWhile
+	NiOverride.ApplyNodeOverrides(akTarget)
 EndFunction
 
 String Function GetLastNode(Actor akTarget, Int aiArea)
@@ -128,6 +142,7 @@ Function ClearDirtGameLoad(Actor akTarget) ; Clears all dirt overlays from all s
 	mzinUtil.LogTrace("Called ClearDirtGameLoad on " + akTarget.GetBaseObject().GetName())
 	int Gender = akTarget.GetLeveledActorBase().GetSex()
 	String TexPath
+	String UBEPrefix = mzinUBEDirtTextures.ResolvePrefix(akTarget, Gender)
 	String[] TexPrefixes
 	String Node
 	Int i = 0
@@ -146,7 +161,7 @@ Function ClearDirtGameLoad(Actor akTarget) ; Clears all dirt overlays from all s
 				k -= 1
 				TexPath = NiOverride.GetNodeOverrideString(akTarget, Gender as Bool, Node, 9, 0)
 				;mzinUtil.LogTrace("ClearDirt(): Target: " + akTarget.GetBaseObject().GetName() + ". Node: " + Node + ". TexPath: " + TexPath)
-				If TexPath == (TexPrefixes[k] + "DirtFX" + Areas[i] + ".dds") || TexPath == ""
+				If TexPath == (TexPrefixes[k] + "DirtFX" + Areas[i] + ".dds") || TexPath == (UBEPrefix + "DirtFX" + Areas[i] + ".dds") || TexPath == ""
 					RemoveOverlay(akTarget, Gender as Bool, Node)
 					;mzinUtil.LogTrace("Removing overlay from slot " + j + " of area: " + Areas[i] + " on " + akTarget.GetBaseObject().GetName())
 				EndIf
